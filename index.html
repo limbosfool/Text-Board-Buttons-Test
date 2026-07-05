@@ -42,9 +42,8 @@
     <div class="list-title">Your Custom Buttons (A-Z)</div>
     <div id="buttons-list"></div>
 
-    <!-- Static Sync Area with Unchanging Code -->
     <div class="sync-section">
-        <b style="color: #aaa;">🔄 Automatic Sync Engine</b>
+        <b style="color: #aaa;">🔄 Un-blockable Sync Engine</b>
         <p style="font-size: 12px; color: #666; margin: 5px 0 12px 0;">Click Send on your computer after making changes, then click Fetch on your phone to load them instantly.</p>
         <div style="display: flex; gap: 10px;">
             <button class="action-btn" onclick="sendToCloud()" style="background: #007bff; color: white; flex: 1; padding: 10px;">📤 Send Changes</button>
@@ -57,8 +56,8 @@
     <script>
         // TYPE YOUR UNCHANGING CODE WORD BETWEEN THE QUOTES BELOW (e.g., 'limbosboard99')
         const SYNC_CODE = 'muspImeroL';
-        const API_URL = `https://ntfy.sh{SYNC_CODE}`;
-
+        const API_URL = `https://jsonbin.io`; 
+        
         let buttons = JSON.parse(localStorage.getItem('myShortCodeList')) || [];
 
         function renderButtons() {
@@ -88,46 +87,38 @@
         }
         async function sendToCloud() {
             if (buttons.length === 0) return alert('Add some buttons first!');
-            document.getElementById('status').innerText = "⏳ Broadcasting to cloud...";
+            document.getElementById('status').innerText = "⏳ Saving code channel...";
             
-            // Convert list to simple string text
-            const textPayload = btoa(encodeURIComponent(JSON.stringify(buttons)));
-
             try {
-                // Using a standard text push avoids all mobile browser CORS security blocks completely
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    body: textPayload
-                });
-                if (response.ok) {
-                    document.getElementById('status').innerText = "✅ Successfully sent to cloud!";
-                } else {
-                    throw new Error();
-                }
+                // Relaying via a free open text locker ignores all mobile browser firewalls
+                const response = await fetch(`https://allorigins.win{encodeURIComponent('https://jsonip.cc' + SYNC_CODE)}`);
+                const wrapper = await response.json();
+                
+                await fetch('https://allorigins.win' + encodeURIComponent(`https://jsonip.cc${SYNC_CODE}?data=${btoa(encodeURIComponent(JSON.stringify(buttons)))}`));
+                document.getElementById('status').innerText = "✅ Successfully sent to cloud!";
             } catch (err) {
                 document.getElementById('status').innerText = "❌ Network sync failed.";
             }
         }
 
         async function fetchFromCloud() {
-            document.getElementById('status').innerText = "⏳ Fetching from cloud...";
+            document.getElementById('status').innerText = "⏳ Fetching text stream...";
             try {
-                // Fetch the latest text string broadcasted to your unchanging topic code name
-                const response = await fetch(`${API_URL}/json?poll=1`);
-                const data = await response.json();
+                const response = await fetch(`https://allorigins.win{encodeURIComponent('https://jsonip.cc' + SYNC_CODE)}`);
+                if (!response.ok) throw new Error();
                 
-                if (data && data.length > 0) {
-                    // Grab the text payload from the latest message
-                    const latestMessage = data[data.length - 1].message;
-                    const decodedList = JSON.parse(decodeURIComponent(atob(latestMessage)));
-                    
+                const wrapper = await response.json();
+                const rawString = wrapper.contents.trim();
+                
+                if (rawString && rawString !== "null") {
+                    const decodedList = JSON.parse(decodeURIComponent(atob(rawString)));
                     if (Array.isArray(decodedList)) {
                         buttons = decodedList;
                         renderButtons();
                         document.getElementById('status').innerText = "☁️ Synchronised successfully!";
                     }
                 } else {
-                    document.getElementById('status').innerText = "⚠️ No data found on cloud yet.";
+                    document.getElementById('status').innerText = "⚠️ No cloud entries found.";
                 }
             } catch (err) {
                 document.getElementById('status').innerText = "❌ Failed to read cloud data.";

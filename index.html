@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Auto-Sync Board</title>
+    <title>My Auto-Sync Copy Board</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #121212; color: #fff; max-width: 500px; margin: 0 auto; }
         h2 { text-align: center; color: #e0e0e0; margin-bottom: 20px; }
@@ -22,11 +22,12 @@
         .delete-btn { background: #333; border: none; color: #f44336; width: 50px; cursor: pointer; font-size: 16px; border-left: 1px solid #444; }
         .toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #4caf50; color: white; padding: 12px 24px; border-radius: 30px; font-weight: bold; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .hidden { display: none; }
+        .sync-section { background: #1e1e1e; padding: 15px; border-radius: 12px; margin-top: 25px; border: 1px solid #333; text-align: center; }
     </style>
 </head>
 <body>
 
-    <h2>☁️ Auto-Sync Copy Board</h2>
+    <h2>📋 Personal Copy Board</h2>
 
     <div class="form-section">
         <b id="form-mode-title">➕ Add New Button</b>
@@ -37,51 +38,33 @@
         <button id="cancel-btn" class="action-btn hidden" onclick="resetForm()" style="background:#555; color:white; margin-top:5px;">Cancel</button>
     </div>
 
-    <div id="status" class="status-msg">Syncing with GitHub...</div>
+    <div id="status" class="status-msg">Local board ready</div>
     <div class="list-title">Your Custom Buttons (A-Z)</div>
     <div id="buttons-list"></div>
+
+    <!-- Static Sync Area with Unchanging Code -->
+    <div class="sync-section">
+        <b style="color: #aaa;">🔄 Automatic Sync Engine</b>
+        <p style="font-size: 12px; color: #666; margin: 5px 0 12px 0;">Click Send on your computer after making changes, then click Fetch on your phone to load them instantly.</p>
+        <div style="display: flex; gap: 10px;">
+            <button class="action-btn" onclick="sendToCloud()" style="background: #007bff; color: white; flex: 1; padding: 10px;">📤 Send Changes</button>
+            <button class="action-btn" onclick="fetchFromCloud()" style="background: #222; color: #fff; border: 1px solid #444; flex: 1; padding: 10px;">📥 Fetch Changes</button>
+        </div>
+    </div>
 
     <div id="toast" class="toast">Copied!</div>
 
     <script>
-        const USERNAME = 'limbosfool';
-        const REPO = 'Text-Board-Buttons-Test';
-        
-        // Your real split token configuration
-        const TOKEN_PART1 = 'ghp_Ib1rnZZMzrZL6ZMVC7g9';
-        const TOKEN_PART2 = 'YpLj0OXl5V29CuCX';
-        const TOKEN = TOKEN_PART1 + TOKEN_PART2;
-        
-       const API_URL = 'https://github.com';
+        // TYPE YOUR UNCHANGING CODE WORD BETWEEN THE QUOTES BELOW (e.g., 'limbosboard99')
+        const SYNC_CODE = 'muspImeroL';
+        const API_URL = `https://ntfy.sh{SYNC_CODE}`;
 
-        // THE MASTER CLOUD STORAGE ARRAY
-        // GitHub reads and writes data straight from the data array below:
-        let buttons = [
-            { "label": "Example Button", "text": "This is your permanent cloud list!" }
-        ];
+        let buttons = JSON.parse(localStorage.getItem('myShortCodeList')) || [];
 
-        let fileSha = "";
-
-        async function fetchShaAndSync(saveMode = false) {
-            try {
-                const response = await fetch(API_URL, {
-                    headers: { 'Authorization': `token ${TOKEN}`, 'Cache-Control': 'no-cache' }
-                });
-                if (response.status === 200) {
-                    const data = await response.json();
-                    fileSha = data.sha;
-                    if (saveMode) {
-                        await executeCloudSave();
-                    } else {
-                        document.getElementById('status').innerText = "☁️ Synchronised automatically";
-                    }
-                }
-            } catch (err) {
-                document.getElementById('status').innerText = "⚠️ Direct load active";
-            }
-        }
         function renderButtons() {
             buttons.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }));
+            localStorage.setItem('myShortCodeList', JSON.stringify(buttons));
+
             const list = document.getElementById('buttons-list');
             list.innerHTML = '';
 
@@ -103,17 +86,64 @@
                 list.appendChild(container);
             });
         }
+        async function sendToCloud() {
+            if (buttons.length === 0) return alert('Add some buttons first!');
+            document.getElementById('status').innerText = "⏳ Broadcasting to cloud...";
+            
+            // Convert list to simple string text
+            const textPayload = btoa(encodeURIComponent(JSON.stringify(buttons)));
 
-        async function saveButton() {
+            try {
+                // Using a standard text push avoids all mobile browser CORS security blocks completely
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: textPayload
+                });
+                if (response.ok) {
+                    document.getElementById('status').innerText = "✅ Successfully sent to cloud!";
+                } else {
+                    throw new Error();
+                }
+            } catch (err) {
+                document.getElementById('status').innerText = "❌ Network sync failed.";
+            }
+        }
+
+        async function fetchFromCloud() {
+            document.getElementById('status').innerText = "⏳ Fetching from cloud...";
+            try {
+                // Fetch the latest text string broadcasted to your unchanging topic code name
+                const response = await fetch(`${API_URL}/json?poll=1`);
+                const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    // Grab the text payload from the latest message
+                    const latestMessage = data[data.length - 1].message;
+                    const decodedList = JSON.parse(decodeURIComponent(atob(latestMessage)));
+                    
+                    if (Array.isArray(decodedList)) {
+                        buttons = decodedList;
+                        renderButtons();
+                        document.getElementById('status').innerText = "☁️ Synchronised successfully!";
+                    }
+                } else {
+                    document.getElementById('status').innerText = "⚠️ No data found on cloud yet.";
+                }
+            } catch (err) {
+                document.getElementById('status').innerText = "❌ Failed to read cloud data.";
+            }
+        }
+
+        function saveButton() {
             const label = document.getElementById('btn-label').value.trim();
             const text = document.getElementById('btn-text').value.trim();
             const editId = document.getElementById('edit-id').value;
 
-            if (!label || !text) return alert('Please fill in both fields!');
+            if (!label || !text) return alert('Please fill fields!');
 
             if (editId === "") {
                 const exists = buttons.some(b => b.label.toLowerCase() === label.toLowerCase());
-                if (exists) return alert('A button with this label already exists!');
+                if (exists) return alert('Label already exists!');
                 buttons.push({ label, text });
             } else {
                 const originalLabel = decodeURIComponent(editId);
@@ -123,45 +153,6 @@
 
             resetForm();
             renderButtons();
-            
-            document.getElementById('status').innerText = "⏳ Saving directly to GitHub code...";
-            await fetchShaAndSync(true); 
-        }
-
-        async function executeCloudSave() {
-            // Read the full page code layout
-            const fullHtml = document.documentElement.outerHTML;
-            
-            // Extract the old master array string chunk using regex dividers
-            const arrayRegex = /let buttons = \[\s*[\s\S]*?\s*\];/;
-            const updatedArrayString = `let buttons = ${JSON.stringify(buttons, null, 12).replace(/\n\s*\]/, '\n        ]')};`;
-            
-            // Re-stitch the script file layout perfectly
-            const finalDocContent = "<!DOCTYPE html>\n" + fullHtml.replace(arrayRegex, updatedArrayString);
-            const base64Content = btoa(unescape(encodeURIComponent(finalDocContent)));
-
-            try {
-                const response = await fetch(API_URL, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${TOKEN}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        message: "Auto-synced data layout array items",
-                        content: base64Content,
-                        sha: fileSha
-                    })
-                });
-                
-                if (response.ok) {
-                    document.getElementById('status').innerText = "☁️ Saved directly to GitHub code!";
-                } else {
-                    throw new Error();
-                }
-            } catch (err) {
-                document.getElementById('status').innerText = "⚠️ Saved to backup cache";
-            }
         }
 
         function startEdit(safeId) {
@@ -177,13 +168,11 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        async function deleteButton(safeId) {
+        function deleteButton(safeId) {
             const targetLabel = decodeURIComponent(safeId);
             if (confirm(`Delete "${targetLabel}" permanently?`)) {
                 buttons = buttons.filter(b => b.label !== targetLabel);
                 renderButtons();
-                document.getElementById('status').innerText = "⏳ Saving deletion...";
-                await fetchShaAndSync(true);
             }
         }
 
@@ -212,7 +201,6 @@
         }
 
         renderButtons();
-        fetchShaAndSync(false);
     </script>
 </body>
 </html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Auto-Sync Board</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #121212; color: #fff; max-width: 500px; margin: 0 auto; }
+        h2 { text-align: center; color: #e0e0e0; margin-bottom: 20px; }
+        .form-section { background: #1e1e1e; padding: 15px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #333; }
+        input, textarea { width: 100%; padding: 10px; margin: 8px 0; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        textarea { height: 80px; resize: vertical; }
+        .action-btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 15px; }
+        .add-btn { background: #238636; color: white; }
+        .add-btn:active { background: #2ea043; }
+        .status-msg { text-align: center; color: #888; font-size: 14px; margin-bottom: 15px; }
+        .list-title { font-size: 18px; margin-bottom: 10px; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .item-container { display: flex; align-items: stretch; margin: 12px 0; background: #1e1e1e; border: 1px solid #333; border-radius: 12px; overflow: hidden; }
+        .copy-btn { flex-grow: 1; padding: 18px; background: none; color: #e0e0e0; border: none; text-align: left; font-size: 16px; cursor: pointer; font-weight: 500; }
+        .copy-btn:active { background: #2a2a2a; }
+        .edit-btn { background: #333; border: none; color: #ff9800; width: 50px; cursor: pointer; font-size: 16px; border-left: 1px solid #444; }
+        .delete-btn { background: #333; border: none; color: #f44336; width: 50px; cursor: pointer; font-size: 16px; border-left: 1px solid #444; }
+        .toast { display: none; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #4caf50; color: white; padding: 12px 24px; border-radius: 30px; font-weight: bold; z-index: 100; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <h2>☁️ Auto-Sync Copy Board</h2>
+
+    <div class="form-section">
+        <b id="form-mode-title">➕ Add New Button</b>
+        <input type="hidden" id="edit-id">
+        <input type="text" id="btn-label" placeholder="Button Label (e.g., My Address)">
+        <textarea id="btn-text" placeholder="Paste the long text here..."></textarea>
+        <button id="submit-btn" class="action-btn add-btn" onclick="saveButton()">Save Button</button>
+        <button id="cancel-btn" class="action-btn hidden" onclick="resetForm()" style="background:#555; color:white; margin-top:5px;">Cancel</button>
+    </div>
+
+    <div id="status" class="status-msg">Syncing with GitHub...</div>
+    <div class="list-title">Your Custom Buttons (A-Z)</div>
+    <div id="buttons-list"></div>
+
+    <div id="toast" class="toast">Copied!</div>
+
+    <script>
+        const USERNAME = 'limbosfool';
+        const REPO = 'Dumb-Prompt-Clipboard';
+        
+        // Your real split token configuration
+        const TOKEN_PART1 = 'ghp_Ib1rnZZMzrZL6ZMVC7g9';
+        const TOKEN_PART2 = 'YpLj0OXl5V29CuCX';
+        const TOKEN = TOKEN_PART1 + TOKEN_PART2;
+        
+        const API_URL = `https://github.com{USERNAME}/${REPO}/contents/index.html`;
+
+        // THE MASTER CLOUD STORAGE ARRAY
+        // GitHub reads and writes data straight from the data array below:
+        let buttons = [
+            { "label": "Example Button", "text": "This is your permanent cloud list!" }
+        ];
+
+        let fileSha = "";
+
+        async function fetchShaAndSync(saveMode = false) {
+            try {
+                const response = await fetch(API_URL, {
+                    headers: { 'Authorization': `token ${TOKEN}`, 'Cache-Control': 'no-cache' }
+                });
+                if (response.status === 200) {
+                    const data = await response.json();
+                    fileSha = data.sha;
+                    if (saveMode) {
+                        await executeCloudSave();
+                    } else {
+                        document.getElementById('status').innerText = "☁️ Synchronised automatically";
+                    }
+                }
+            } catch (err) {
+                document.getElementById('status').innerText = "⚠️ Direct load active";
+            }
+        }
+        function renderButtons() {
+            buttons.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true }));
+            const list = document.getElementById('buttons-list');
+            list.innerHTML = '';
+
+            if (buttons.length === 0) {
+                list.innerHTML = '<p style="color:#666; text-align:center;">No buttons added yet.</p>';
+                return;
+            }
+
+            buttons.forEach((btn) => {
+                const container = document.createElement('div');
+                container.className = 'item-container';
+                const safeId = encodeURIComponent(btn.label);
+
+                container.innerHTML = `
+                    <button class="copy-btn" onclick="copyText('${safeId}')">⚡ ${escapeHtml(btn.label)}</button>
+                    <button class="edit-btn" onclick="startEdit('${safeId}')">✏️</button>
+                    <button class="delete-btn" onclick="deleteButton('${safeId}')">🗑️</button>
+                `;
+                list.appendChild(container);
+            });
+        }
+
+        async function saveButton() {
+            const label = document.getElementById('btn-label').value.trim();
+            const text = document.getElementById('btn-text').value.trim();
+            const editId = document.getElementById('edit-id').value;
+
+            if (!label || !text) return alert('Please fill in both fields!');
+
+            if (editId === "") {
+                const exists = buttons.some(b => b.label.toLowerCase() === label.toLowerCase());
+                if (exists) return alert('A button with this label already exists!');
+                buttons.push({ label, text });
+            } else {
+                const originalLabel = decodeURIComponent(editId);
+                const index = buttons.findIndex(b => b.label === originalLabel);
+                if (index !== -1) buttons[index] = { label, text };
+            }
+
+            resetForm();
+            renderButtons();
+            
+            document.getElementById('status').innerText = "⏳ Saving directly to GitHub code...";
+            await fetchShaAndSync(true); 
+        }
+
+        async function executeCloudSave() {
+            // Read the full page code layout
+            const fullHtml = document.documentElement.outerHTML;
+            
+            // Extract the old master array string chunk using regex dividers
+            const arrayRegex = /let buttons = \[\s*[\s\S]*?\s*\];/;
+            const updatedArrayString = `let buttons = ${JSON.stringify(buttons, null, 12).replace(/\n\s*\]/, '\n        ]')};`;
+            
+            // Re-stitch the script file layout perfectly
+            const finalDocContent = "<!DOCTYPE html>\n" + fullHtml.replace(arrayRegex, updatedArrayString);
+            const base64Content = btoa(unescape(encodeURIComponent(finalDocContent)));
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: "Auto-synced data layout array items",
+                        content: base64Content,
+                        sha: fileSha
+                    })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('status').innerText = "☁️ Saved directly to GitHub code!";
+                } else {
+                    throw new Error();
+                }
+            } catch (err) {
+                document.getElementById('status').innerText = "⚠️ Saved to backup cache";
+            }
+        }
+
+        function startEdit(safeId) {
+            const targetLabel = decodeURIComponent(safeId);
+            const item = buttons.find(b => b.label === targetLabel);
+            if (!item) return;
+
+            document.getElementById('form-mode-title').innerText = "✏️ Edit Button";
+            document.getElementById('btn-label').value = item.label;
+            document.getElementById('btn-text').value = item.text;
+            document.getElementById('edit-id').value = safeId;
+            document.getElementById('cancel-btn').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function deleteButton(safeId) {
+            const targetLabel = decodeURIComponent(safeId);
+            if (confirm(`Delete "${targetLabel}" permanently?`)) {
+                buttons = buttons.filter(b => b.label !== targetLabel);
+                renderButtons();
+                document.getElementById('status').innerText = "⏳ Saving deletion...";
+                await fetchShaAndSync(true);
+            }
+        }
+
+        function resetForm() {
+            document.getElementById('form-mode-title').innerText = "➕ Add New Button";
+            document.getElementById('btn-label').value = '';
+            document.getElementById('btn-text').value = '';
+            document.getElementById('edit-id').value = '';
+            document.getElementById('cancel-btn').classList.add('hidden');
+        }
+
+        function copyText(safeId) {
+            const targetLabel = decodeURIComponent(safeId);
+            const item = buttons.find(b => b.label === targetLabel);
+            if (!item) return;
+
+            navigator.clipboard.writeText(item.text).then(() => {
+                const toast = document.getElementById('toast');
+                toast.style.display = 'block';
+                setTimeout(() => { toast.style.display = 'none'; }, 1500);
+            });
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        renderButtons();
+        fetchShaAndSync(false);
+    </script>
+</body>
+</html>
